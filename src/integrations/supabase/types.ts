@@ -14,7 +14,63 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      video_jobs: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          duration: string
+          error_message: string | null
+          format: string
+          generated_prompt: string | null
+          id: string
+          progress: number | null
+          session_id: string
+          status: string
+          style: string
+          thumbnail_url: string | null
+          updated_at: string
+          user_prompt: string
+          video_type: string
+          video_url: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          duration: string
+          error_message?: string | null
+          format: string
+          generated_prompt?: string | null
+          id?: string
+          progress?: number | null
+          session_id: string
+          status?: string
+          style: string
+          thumbnail_url?: string | null
+          updated_at?: string
+          user_prompt: string
+          video_type: string
+          video_url?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          duration?: string
+          error_message?: string | null
+          format?: string
+          generated_prompt?: string | null
+          id?: string
+          progress?: number | null
+          session_id?: string
+          status?: string
+          style?: string
+          thumbnail_url?: string | null
+          updated_at?: string
+          user_prompt?: string
+          video_type?: string
+          video_url?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

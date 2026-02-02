@@ -15,7 +15,6 @@ const stepOrder: WizardStep[] = ['type', 'style', 'duration', 'prompt', 'preview
 export const VideoWizard = () => {
   const [currentStep, setCurrentStep] = useState<WizardStep>('type');
   const [completedSteps, setCompletedSteps] = useState<WizardStep[]>([]);
-  const [isGenerating, setIsGenerating] = useState(false);
   const [data, setData] = useState<WizardData>({
     videoType: null,
     style: null,
@@ -58,15 +57,7 @@ export const VideoWizard = () => {
     }
   };
 
-  const handleGenerate = () => {
-    setIsGenerating(true);
-    toast.success('Video sedang diproses!', {
-      description: 'Kami akan memberitahu saat video siap.',
-    });
-    setTimeout(() => {
-      setIsGenerating(false);
-    }, 3000);
-  };
+  // Removed - now handled by StepPreview internally
 
   const renderStep = () => {
     switch (currentStep) {
@@ -103,11 +94,7 @@ export const VideoWizard = () => {
         );
       case 'preview':
         return (
-          <StepPreview
-            data={data}
-            onGenerate={handleGenerate}
-            isGenerating={isGenerating}
-          />
+          <StepPreview data={data} />
         );
       default:
         return null;
