@@ -1,9 +1,9 @@
 import { motion } from 'framer-motion';
-import { Play, Download, RefreshCw, Check, Sparkles, Film, AlertCircle } from 'lucide-react';
+import { Play, Download, RefreshCw, Check, Sparkles, Film, AlertCircle, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { WizardData } from '@/types/wizard';
-import { videoTypes, videoStyles, videoDurations, videoFormats } from '@/data/wizardOptions';
-import { detectConflicts, getUserFriendlySummary } from '@/lib/promptGenerator';
+import { videoStyles } from '@/data/wizardOptions';
+import { analyzeConfiguration, getDetailedSummary } from '@/lib/promptGenerator';
 import { ConflictWarning } from './ConflictWarning';
 import { useVideoGeneration } from '@/hooks/useVideoGeneration';
 
@@ -23,13 +23,10 @@ const loadingMessages = [
 export const StepPreview = ({ data }: StepPreviewProps) => {
   const { job, isSubmitting, submitJob, resetJob } = useVideoGeneration();
   
-  const selectedType = videoTypes.find((t) => t.id === data.videoType);
+  // Use the enhanced AI analysis
+  const analysis = analyzeConfiguration(data);
+  const detailedSummary = getDetailedSummary(data);
   const selectedStyle = videoStyles.find((s) => s.id === data.style);
-  const selectedDuration = videoDurations.find((d) => d.id === data.duration);
-  const selectedFormat = videoFormats.find((f) => f.id === data.format);
-  
-  const warnings = detectConflicts(data);
-  const friendlySummary = getUserFriendlySummary(data);
 
   const isGenerating = job?.status === 'pending' || job?.status === 'processing';
   const isCompleted = job?.status === 'completed';
@@ -71,9 +68,31 @@ export const StepPreview = ({ data }: StepPreviewProps) => {
         </p>
       </div>
 
-      {/* Conflict Warnings */}
-      {warnings.length > 0 && !isCompleted && (
-        <ConflictWarning warnings={warnings} />
+      {/* Configuration Score & Warnings */}
+      {!isCompleted && (
+        <div className="space-y-4">
+          {/* Score Badge */}
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-center justify-center gap-3"
+          >
+            <div className={`
+              px-4 py-2 rounded-full font-semibold text-sm
+              ${analysis.score >= 90 ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
+                analysis.score >= 70 ? 'bg-primary/20 text-primary border border-primary/30' :
+                analysis.score >= 50 ? 'bg-warning/20 text-warning border border-warning/30' :
+                'bg-destructive/20 text-destructive border border-destructive/30'}
+            `}>
+              {analysis.label} • Skor: {analysis.score}/100
+            </div>
+          </motion.div>
+
+          {/* Warnings */}
+          {analysis.warnings.length > 0 && (
+            <ConflictWarning warnings={analysis.warnings} />
+          )}
+        </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -83,52 +102,64 @@ export const StepPreview = ({ data }: StepPreviewProps) => {
           animate={{ opacity: 1, x: 0 }}
           className="bg-glass rounded-xl p-6 space-y-4"
         >
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-primary" />
-            <h3 className="text-lg font-semibold font-heading">Konfigurasi Video</h3>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-primary" />
+              <h3 className="text-lg font-semibold font-heading">Konfigurasi Video</h3>
+            </div>
           </div>
           
-          {/* AI Generated Summary - No technical prompt shown */}
+          {/* AI Generated Summary - Human readable */}
           <div className="bg-primary/5 border border-primary/20 rounded-lg p-4">
-            <p className="text-sm text-muted-foreground mb-1">AI akan membuat:</p>
-            <p className="font-medium text-foreground">{friendlySummary}</p>
+            <p className="text-sm text-muted-foreground mb-2">AI akan membuat:</p>
+            <p className="font-medium text-foreground">{analysis.summary}</p>
           </div>
           
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-muted/30 rounded-lg p-3">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-lg">{selectedType?.icon}</span>
-                <span className="text-xs text-muted-foreground">Tipe</span>
-              </div>
-              <div className="font-medium text-sm">{selectedType?.title}</div>
-            </div>
-
-            <div className="bg-muted/30 rounded-lg p-3">
-              <div className="flex items-center gap-2 mb-1">
-                <div className={`w-4 h-4 rounded ${selectedStyle?.preview}`} />
-                <span className="text-xs text-muted-foreground">Gaya</span>
-              </div>
-              <div className="font-medium text-sm">{selectedStyle?.title}</div>
-            </div>
-
-            <div className="bg-muted/30 rounded-lg p-3">
-              <div className="flex items-center gap-2 mb-1">
-                <Film className="w-4 h-4 text-primary" />
-                <span className="text-xs text-muted-foreground">Durasi</span>
-              </div>
-              <div className="font-medium text-sm">{selectedDuration?.label}</div>
-            </div>
-
-            <div className="bg-muted/30 rounded-lg p-3">
-              <div className="flex items-center gap-2 mb-1">
-                <div className="w-4 h-3 border border-primary rounded-sm" />
-                <span className="text-xs text-muted-foreground">Format</span>
-              </div>
-              <div className="font-medium text-sm">{selectedFormat?.label} ({selectedFormat?.ratio})</div>
-            </div>
+          {/* Detailed Summary Points */}
+          <div className="space-y-2">
+            {detailedSummary.map((point, index) => (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.1 }}
+                className="text-sm text-muted-foreground bg-muted/20 rounded-lg px-3 py-2"
+              >
+                {point}
+              </motion.div>
+            ))}
           </div>
 
-          {/* User's description - simplified view */}
+          {/* AI Recommendations */}
+          {analysis.recommendations.length > 0 && !isGenerating && !isCompleted && (
+            <div className="pt-3 border-t border-border">
+              <div className="flex items-center gap-2 mb-3">
+                <Zap className="w-4 h-4 text-primary" />
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  AI akan menambahkan
+                </span>
+              </div>
+              <div className="grid grid-cols-1 gap-2">
+                {analysis.recommendations.slice(0, 3).map((rec, index) => (
+                  <motion.div
+                    key={index}
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2 + index * 0.1 }}
+                    className="flex items-start gap-2 bg-muted/30 rounded-lg p-2"
+                  >
+                    <span className="text-lg flex-shrink-0">{rec.icon}</span>
+                    <div className="min-w-0">
+                      <div className="text-xs font-semibold text-foreground">{rec.title}</div>
+                      <div className="text-xs text-muted-foreground line-clamp-1">{rec.description}</div>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* User's description */}
           <div className="pt-3 border-t border-border">
             <div className="text-xs text-muted-foreground mb-2">Deskripsi Anda</div>
             <p className="text-sm leading-relaxed line-clamp-3">{data.prompt}</p>
