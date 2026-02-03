@@ -38,20 +38,108 @@ interface VideoGenerationService {
 // ============================================
 
 class DemoVideoService implements VideoGenerationService {
-  // Sample video URLs for different scenarios
-  private readonly sampleVideos = [
-    "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-    "https://storage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
-    "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-    "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
+  // Video mapping by type - education/tutorial focused
+  private readonly educationVideos = [
+    "https://storage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
+    "https://storage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4",
   ];
 
-  private readonly sampleThumbnails = [
-    "https://images.unsplash.com/photo-1536240478700-b869070f9279?w=640&h=360&fit=crop",
-    "https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?w=640&h=360&fit=crop",
-    "https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?w=640&h=360&fit=crop",
-    "https://images.unsplash.com/photo-1518676590629-3dcbd9c5a5c9?w=640&h=360&fit=crop",
+  // Social media / modern style videos
+  private readonly socialVideos = [
+    "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+    "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
+    "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
   ];
+
+  // Cinematic style videos
+  private readonly cinematicVideos = [
+    "https://storage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
+    "https://storage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4",
+    "https://storage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
+  ];
+
+  // Playful/animated style videos
+  private readonly animatedVideos = [
+    "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+    "https://storage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
+  ];
+
+  // Corporate/professional videos
+  private readonly corporateVideos = [
+    "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4",
+    "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4",
+  ];
+
+  // General promotional videos
+  private readonly promotionalVideos = [
+    "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
+    "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+  ];
+
+  // Thumbnails mapped by category
+  private readonly thumbnailsByCategory: Record<string, string[]> = {
+    education: [
+      "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=640&h=360&fit=crop",
+      "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=640&h=360&fit=crop",
+    ],
+    social: [
+      "https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=640&h=360&fit=crop",
+      "https://images.unsplash.com/photo-1432888498266-38ffec3eaf0a?w=640&h=360&fit=crop",
+    ],
+    cinematic: [
+      "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=640&h=360&fit=crop",
+      "https://images.unsplash.com/photo-1485846234645-a62644f84728?w=640&h=360&fit=crop",
+    ],
+    animated: [
+      "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=640&h=360&fit=crop",
+      "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=640&h=360&fit=crop",
+    ],
+    corporate: [
+      "https://images.unsplash.com/photo-1556761175-4b46a572b786?w=640&h=360&fit=crop",
+      "https://images.unsplash.com/photo-1497366216548-37526070297c?w=640&h=360&fit=crop",
+    ],
+    promotional: [
+      "https://images.unsplash.com/photo-1557804506-669a67965ba0?w=640&h=360&fit=crop",
+      "https://images.unsplash.com/photo-1551434678-e076c223a692?w=640&h=360&fit=crop",
+    ],
+  };
+
+  private selectVideoByConfig(videoType: string, style: string): { category: string; videos: string[] } {
+    // Priority 1: Style-based selection
+    if (style === 'cinematic') {
+      return { category: 'cinematic', videos: this.cinematicVideos };
+    }
+    if (style === 'playful' || style === 'retro') {
+      return { category: 'animated', videos: this.animatedVideos };
+    }
+    if (style === 'corporate') {
+      return { category: 'corporate', videos: this.corporateVideos };
+    }
+    if (style === 'futuristic' || style === 'modern') {
+      // For modern/futuristic, check type for more specific mapping
+      if (videoType === 'social') {
+        return { category: 'social', videos: this.socialVideos };
+      }
+      return { category: 'cinematic', videos: this.cinematicVideos };
+    }
+
+    // Priority 2: Type-based selection
+    if (videoType === 'tutorial' || videoType === 'explainer' || videoType === 'presentation') {
+      return { category: 'education', videos: this.educationVideos };
+    }
+    if (videoType === 'social') {
+      return { category: 'social', videos: this.socialVideos };
+    }
+    if (videoType === 'story') {
+      return { category: 'cinematic', videos: this.cinematicVideos };
+    }
+    if (videoType === 'promotional') {
+      return { category: 'promotional', videos: this.promotionalVideos };
+    }
+
+    // Default fallback
+    return { category: 'promotional', videos: this.promotionalVideos };
+  }
 
   async generate(
     jobId: string, 
@@ -85,14 +173,22 @@ class DemoVideoService implements VideoGenerationService {
       await onProgress(stage.progress);
     }
 
-    // Select sample video based on video type for variety
-    const typeIndex = ['promotional', 'explainer', 'social', 'presentation', 'story', 'tutorial']
-      .indexOf(payload.videoType);
-    const videoIndex = typeIndex >= 0 ? typeIndex % this.sampleVideos.length : 0;
+    // Smart video selection based on user configuration
+    const { category, videos } = this.selectVideoByConfig(payload.videoType, payload.style);
+    const randomIndex = Math.floor(Math.random() * videos.length);
+    const selectedVideo = videos[randomIndex];
+
+    // Get matching thumbnail
+    const thumbnails = this.thumbnailsByCategory[category] || this.thumbnailsByCategory.promotional;
+    const thumbnailIndex = Math.floor(Math.random() * thumbnails.length);
+    const selectedThumbnail = thumbnails[thumbnailIndex];
+
+    console.log(`[DemoService] Selected category: ${category}`);
+    console.log(`[DemoService] Selected video: ${selectedVideo}`);
 
     return {
-      videoUrl: this.sampleVideos[videoIndex],
-      thumbnailUrl: this.sampleThumbnails[videoIndex],
+      videoUrl: selectedVideo,
+      thumbnailUrl: selectedThumbnail,
       isDemo: true,
     };
   }
