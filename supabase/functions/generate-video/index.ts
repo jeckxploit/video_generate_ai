@@ -7,6 +7,15 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// ============================================
+// INPUT VALIDATION SCHEMA
+// ============================================
+
+const VALID_VIDEO_TYPES = ["promotional", "explainer", "social", "presentation", "story", "tutorial"] as const;
+const VALID_STYLES = ["modern", "cinematic", "playful", "corporate", "retro", "futuristic"] as const;
+const VALID_DURATIONS = ["short", "medium", "standard", "long"] as const;
+const VALID_FORMATS = ["landscape", "portrait", "square"] as const;
+
 interface VideoJobPayload {
   sessionId: string;
   videoType: string;
@@ -14,7 +23,150 @@ interface VideoJobPayload {
   duration: string;
   format: string;
   userPrompt: string;
-  generatedPrompt: string;
+  generatedPrompt?: string;
+}
+
+interface ValidationResult {
+  valid: boolean;
+  errors: string[];
+  sanitizedPayload?: VideoJobPayload;
+}
+
+// ============================================
+// INPUT VALIDATION
+// ============================================
+
+function validateInput(payload: unknown): ValidationResult {
+  const errors: string[] = [];
+
+  if (!payload || typeof payload !== "object") {
+    return { valid: false, errors: ["Invalid request body"] };
+  }
+
+  const data = payload as Record<string, unknown>;
+
+  // Required fields validation
+  if (!data.sessionId || typeof data.sessionId !== "string") {
+    errors.push("sessionId is required and must be a string");
+  }
+
+  if (!data.videoType || typeof data.videoType !== "string") {
+    errors.push("videoType is required and must be a string");
+  } else if (!VALID_VIDEO_TYPES.includes(data.videoType as typeof VALID_VIDEO_TYPES[number])) {
+    errors.push(`videoType must be one of: ${VALID_VIDEO_TYPES.join(", ")}`);
+  }
+
+  if (!data.style || typeof data.style !== "string") {
+    errors.push("style is required and must be a string");
+  } else if (!VALID_STYLES.includes(data.style as typeof VALID_STYLES[number])) {
+    errors.push(`style must be one of: ${VALID_STYLES.join(", ")}`);
+  }
+
+  if (!data.duration || typeof data.duration !== "string") {
+    errors.push("duration is required and must be a string");
+  } else if (!VALID_DURATIONS.includes(data.duration as typeof VALID_DURATIONS[number])) {
+    errors.push(`duration must be one of: ${VALID_DURATIONS.join(", ")}`);
+  }
+
+  if (!data.format || typeof data.format !== "string") {
+    errors.push("format is required and must be a string");
+  } else if (!VALID_FORMATS.includes(data.format as typeof VALID_FORMATS[number])) {
+    errors.push(`format must be one of: ${VALID_FORMATS.join(", ")}`);
+  }
+
+  if (!data.userPrompt || typeof data.userPrompt !== "string") {
+    errors.push("userPrompt is required and must be a string");
+  } else if (data.userPrompt.length < 10) {
+    errors.push("userPrompt must be at least 10 characters");
+  } else if (data.userPrompt.length > 2000) {
+    errors.push("userPrompt must not exceed 2000 characters");
+  }
+
+  if (errors.length > 0) {
+    return { valid: false, errors };
+  }
+
+  // Sanitize input
+  const sanitizedPayload: VideoJobPayload = {
+    sessionId: String(data.sessionId).trim(),
+    videoType: String(data.videoType).trim().toLowerCase(),
+    style: String(data.style).trim().toLowerCase(),
+    duration: String(data.duration).trim().toLowerCase(),
+    format: String(data.format).trim().toLowerCase(),
+    userPrompt: String(data.userPrompt).trim(),
+  };
+
+  return { valid: true, errors: [], sanitizedPayload };
+}
+
+// ============================================
+// PROMPT GENERATION
+// Combines all inputs into a clean, structured prompt for AI
+// ============================================
+
+const VIDEO_TYPE_PROMPTS: Record<string, string> = {
+  promotional: "Create a compelling promotional video that drives engagement and brand awareness",
+  explainer: "Create an educational explainer video that clearly communicates complex concepts",
+  social: "Create a dynamic social media video optimized for high engagement and sharing",
+  presentation: "Create a professional presentation video suitable for business and educational contexts",
+  story: "Create an emotionally engaging storytelling video with a clear narrative arc",
+  tutorial: "Create a step-by-step tutorial video that is easy to follow and understand",
+};
+
+const STYLE_PROMPTS: Record<string, string> = {
+  modern: "Use a modern, clean aesthetic with minimalist design, bold typography, and smooth transitions",
+  cinematic: "Apply cinematic quality with dramatic lighting, professional color grading, and film-like camera movements",
+  playful: "Incorporate playful elements with bright colors, bouncy animations, and cheerful visual effects",
+  corporate: "Maintain a professional corporate look with refined colors, structured layouts, and formal presentation",
+  retro: "Apply vintage aesthetics with film grain, nostalgic color palettes, and classic visual effects",
+  futuristic: "Use futuristic sci-fi elements with neon accents, holographic effects, and high-tech visuals",
+};
+
+const DURATION_SPECS: Record<string, { seconds: number; description: string }> = {
+  short: { seconds: 15, description: "15 seconds, perfect for quick social media content" },
+  medium: { seconds: 30, description: "30 seconds, ideal for advertisements and previews" },
+  standard: { seconds: 60, description: "60 seconds, standard for complete promotional content" },
+  long: { seconds: 120, description: "2 minutes, suitable for detailed explanations" },
+};
+
+const FORMAT_SPECS: Record<string, { ratio: string; resolution: string; platform: string }> = {
+  landscape: { ratio: "16:9", resolution: "1920x1080", platform: "YouTube, websites, presentations" },
+  portrait: { ratio: "9:16", resolution: "1080x1920", platform: "TikTok, Instagram Reels, Stories" },
+  square: { ratio: "1:1", resolution: "1080x1080", platform: "Instagram Feed, Facebook" },
+};
+
+function generateFinalPrompt(payload: VideoJobPayload): string {
+  const typePrompt = VIDEO_TYPE_PROMPTS[payload.videoType] || VIDEO_TYPE_PROMPTS.promotional;
+  const stylePrompt = STYLE_PROMPTS[payload.style] || STYLE_PROMPTS.modern;
+  const durationSpec = DURATION_SPECS[payload.duration] || DURATION_SPECS.medium;
+  const formatSpec = FORMAT_SPECS[payload.format] || FORMAT_SPECS.landscape;
+
+  const structuredPrompt = `
+[VIDEO GENERATION REQUEST]
+
+TYPE: ${payload.videoType.toUpperCase()}
+${typePrompt}
+
+VISUAL STYLE: ${payload.style.toUpperCase()}
+${stylePrompt}
+
+SPECIFICATIONS:
+- Duration: ${durationSpec.description}
+- Aspect Ratio: ${formatSpec.ratio}
+- Resolution: ${formatSpec.resolution}
+- Target Platforms: ${formatSpec.platform}
+
+USER CONTENT BRIEF:
+${payload.userPrompt}
+
+GENERATION INSTRUCTIONS:
+Generate a ${durationSpec.seconds}-second video in ${formatSpec.ratio} format.
+The video should embody the ${payload.style} visual style while serving as a ${payload.videoType} content piece.
+Focus on high visual quality, smooth transitions, and engaging pacing appropriate for the target duration.
+Ensure the content aligns with the user's brief while maintaining professional production standards.
+`.trim();
+
+  return structuredPrompt;
 }
 
 // ============================================
@@ -362,10 +514,33 @@ serve(async (req) => {
 
     // ========== SUBMIT NEW JOB ==========
     if (req.method === "POST" && action === "submit") {
-      const payload: VideoJobPayload = await req.json();
-      console.log("[API] Received job submission:", payload.userPrompt.slice(0, 50) + "...");
+      const rawPayload = await req.json();
+      
+      // Validate input
+      const validation = validateInput(rawPayload);
+      if (!validation.valid) {
+        console.error("[API] Validation failed:", validation.errors);
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: "Validation failed",
+            details: validation.errors,
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
 
-      // Create job in database
+      const payload = validation.sanitizedPayload!;
+      console.log("[API] Received validated job submission:", payload.userPrompt.slice(0, 50) + "...");
+
+      // Generate the final prompt for AI
+      const finalPrompt = generateFinalPrompt(payload);
+      console.log("[API] Generated final prompt length:", finalPrompt.length);
+
+      // Create job in database with generated prompt
       const { data: job, error: insertError } = await supabase
         .from("video_jobs")
         .insert({
@@ -375,7 +550,7 @@ serve(async (req) => {
           duration: payload.duration,
           format: payload.format,
           user_prompt: payload.userPrompt,
-          generated_prompt: payload.generatedPrompt,
+          generated_prompt: finalPrompt,
           status: "pending",
           progress: 0,
         })
@@ -389,8 +564,14 @@ serve(async (req) => {
 
       console.log("[API] Job created:", job.id);
 
+      // Prepare payload with generated prompt for processing
+      const processingPayload: VideoJobPayload = {
+        ...payload,
+        generatedPrompt: finalPrompt,
+      };
+
       // Start background processing
-      processVideoJob(supabase, job.id, payload).catch((err) => {
+      processVideoJob(supabase, job.id, processingPayload).catch((err) => {
         console.error("[API] Background processing error:", err);
       });
 
@@ -399,7 +580,8 @@ serve(async (req) => {
           success: true,
           jobId: job.id,
           message: "Video generation started",
-          isDemo: true, // Indicate this is demo mode
+          promptPreview: finalPrompt.slice(0, 200) + "...",
+          isDemo: !Deno.env.get("AI_VIDEO_API_KEY"),
         }),
         {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
