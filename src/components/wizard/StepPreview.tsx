@@ -5,6 +5,7 @@ import { WizardData } from '@/types/wizard';
 import { videoStyles } from '@/data/wizardOptions';
 import { analyzeConfiguration, getDetailedSummary } from '@/lib/promptGenerator';
 import { ConflictWarning } from './ConflictWarning';
+import { VideoResult } from './VideoResult';
 import { useVideoGeneration } from '@/hooks/useVideoGeneration';
 
 interface StepPreviewProps {
@@ -182,169 +183,136 @@ export const StepPreview = ({ data }: StepPreviewProps) => {
           animate={{ opacity: 1, x: 0 }}
           className="bg-glass rounded-xl overflow-hidden"
         >
-          {/* Video Preview Area */}
-          <div className={`relative aspect-video ${selectedStyle?.preview} flex items-center justify-center`}>
-            <div className="absolute inset-0 bg-black/50" />
-            
-            {isGenerating ? (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="relative z-10 w-full px-8 text-center space-y-4"
-              >
-                {/* Animated spinner */}
-                <div className="relative w-20 h-20 mx-auto">
+          {/* Show VideoResult when completed */}
+          {isCompleted && job?.videoUrl ? (
+            <div className="p-4">
+              <VideoResult
+                videoUrl={job.videoUrl}
+                thumbnailUrl={job.thumbnailUrl || undefined}
+                onDownload={handleDownload}
+                onRegenerate={handleRegenerate}
+                isDemo={true}
+              />
+            </div>
+          ) : (
+            <>
+              {/* Video Preview Area */}
+              <div className={`relative aspect-video ${selectedStyle?.preview} flex items-center justify-center`}>
+                <div className="absolute inset-0 bg-black/50" />
+                
+                {isGenerating ? (
                   <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
-                    className="absolute inset-0 rounded-full border-4 border-primary/30 border-t-primary"
-                  />
-                  <div className="absolute inset-2 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center">
-                    <span className="text-2xl font-bold text-white">{Math.round(progress)}%</span>
-                  </div>
-                </div>
-                
-                {/* Loading message */}
-                <motion.p 
-                  key={loadingStepIndex}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="text-white font-medium"
-                >
-                  {loadingMessages[loadingStepIndex]}
-                </motion.p>
-                
-                {/* Progress bar */}
-                <div className="w-full bg-white/20 rounded-full h-2 overflow-hidden">
-                  <motion.div 
-                    className="h-full bg-primary rounded-full"
-                    initial={{ width: 0 }}
-                    animate={{ width: `${progress}%` }}
-                    transition={{ duration: 0.3 }}
-                  />
-                </div>
-                
-                <p className="text-white/60 text-sm">
-                  Status: {job?.status === 'pending' ? 'Menunggu...' : 'Memproses...'}
-                </p>
-              </motion.div>
-            ) : isCompleted && job?.videoUrl ? (
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ type: 'spring', duration: 0.5 }}
-                className="relative z-10 text-center space-y-4"
-              >
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ delay: 0.2 }}
-                  className="w-16 h-16 rounded-full bg-primary/20 backdrop-blur-sm flex items-center justify-center mx-auto"
-                >
-                  <Check className="w-8 h-8 text-primary" />
-                </motion.div>
-                <a 
-                  href={job.videoUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-20 h-20 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors mx-auto group"
-                >
-                  <Play className="w-10 h-10 text-white fill-white ml-1 group-hover:scale-110 transition-transform" />
-                </a>
-                <p className="text-white text-sm">Klik untuk preview</p>
-              </motion.div>
-            ) : isFailed ? (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="relative z-10 text-center space-y-4 px-4"
-              >
-                <div className="w-16 h-16 rounded-full bg-destructive/20 backdrop-blur-sm flex items-center justify-center mx-auto">
-                  <AlertCircle className="w-8 h-8 text-destructive" />
-                </div>
-                <p className="text-white font-medium">Gagal membuat video</p>
-                <p className="text-white/60 text-sm">{job?.errorMessage || 'Terjadi kesalahan. Silakan coba lagi.'}</p>
-              </motion.div>
-            ) : (
-              <div className="relative z-10 text-center space-y-3">
-                <motion.div 
-                  className="text-6xl mb-4"
-                  animate={{ scale: [1, 1.1, 1] }}
-                  transition={{ duration: 2, repeat: Infinity }}
-                >
-                  🎬
-                </motion.div>
-                <p className="text-white font-medium">Preview akan muncul di sini</p>
-                <p className="text-white/60 text-sm">Klik Generate untuk memulai</p>
-              </div>
-            )}
-          </div>
-
-          {/* Action Buttons */}
-          <div className="p-4 space-y-3">
-            {!isCompleted && !isFailed ? (
-              <Button
-                onClick={handleGenerate}
-                disabled={isGenerating || isSubmitting}
-                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold h-12 text-base"
-              >
-                {isGenerating || isSubmitting ? (
-                  <>
-                    <RefreshCw className="w-5 h-5 mr-2 animate-spin" />
-                    Sedang Membuat Video...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-5 h-5 mr-2" />
-                    Generate Video dengan AI
-                  </>
-                )}
-              </Button>
-            ) : (
-              <motion.div 
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="space-y-3"
-              >
-                {isCompleted && (
-                  <>
-                    <div className="flex items-center justify-center gap-2 text-primary py-2">
-                      <Check className="w-5 h-5" />
-                      <span className="font-semibold">Video berhasil dibuat!</span>
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="relative z-10 w-full px-8 text-center space-y-4"
+                  >
+                    {/* Animated spinner */}
+                    <div className="relative w-20 h-20 mx-auto">
+                      <motion.div
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                        className="absolute inset-0 rounded-full border-4 border-primary/30 border-t-primary"
+                      />
+                      <div className="absolute inset-2 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center">
+                        <span className="text-2xl font-bold text-white">{Math.round(progress)}%</span>
+                      </div>
                     </div>
                     
-                    <Button
-                      onClick={handleDownload}
-                      className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold h-12"
+                    {/* Loading message */}
+                    <motion.p 
+                      key={loadingStepIndex}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="text-white font-medium"
                     >
-                      <Download className="w-5 h-5 mr-2" />
-                      Download Video (MP4)
-                    </Button>
-                  </>
+                      {loadingMessages[loadingStepIndex]}
+                    </motion.p>
+                    
+                    {/* Progress bar */}
+                    <div className="w-full bg-white/20 rounded-full h-2 overflow-hidden">
+                      <motion.div 
+                        className="h-full bg-primary rounded-full"
+                        initial={{ width: 0 }}
+                        animate={{ width: `${progress}%` }}
+                        transition={{ duration: 0.3 }}
+                      />
+                    </div>
+                    
+                    <p className="text-white/60 text-sm">
+                      Status: {job?.status === 'pending' ? 'Menunggu...' : 'Memproses...'}
+                    </p>
+                  </motion.div>
+                ) : isFailed ? (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="relative z-10 text-center space-y-4 px-4"
+                  >
+                    <div className="w-16 h-16 rounded-full bg-destructive/20 backdrop-blur-sm flex items-center justify-center mx-auto">
+                      <AlertCircle className="w-8 h-8 text-destructive" />
+                    </div>
+                    <p className="text-white font-medium">Gagal membuat video</p>
+                    <p className="text-white/60 text-sm">{job?.errorMessage || 'Terjadi kesalahan. Silakan coba lagi.'}</p>
+                  </motion.div>
+                ) : (
+                  <div className="relative z-10 text-center space-y-3">
+                    <motion.div 
+                      className="text-6xl mb-4"
+                      animate={{ scale: [1, 1.1, 1] }}
+                      transition={{ duration: 2, repeat: Infinity }}
+                    >
+                      🎬
+                    </motion.div>
+                    <p className="text-white font-medium">Preview akan muncul di sini</p>
+                    <p className="text-white/60 text-sm">Klik Generate untuk memulai</p>
+                  </div>
                 )}
-                
-                <div className="grid grid-cols-2 gap-2">
+              </div>
+
+              {/* Action Buttons */}
+              <div className="p-4 space-y-3">
+                {!isFailed ? (
                   <Button
-                    variant="outline"
-                    onClick={handleRegenerate}
-                    className="w-full"
+                    onClick={handleGenerate}
+                    disabled={isGenerating || isSubmitting}
+                    className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold h-12 text-base"
                   >
-                    <RefreshCw className="w-4 h-4 mr-2" />
-                    {isFailed ? 'Coba Lagi' : 'Generate Ulang'}
+                    {isGenerating || isSubmitting ? (
+                      <>
+                        <RefreshCw className="w-5 h-5 mr-2 animate-spin" />
+                        Sedang Membuat Video...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-5 h-5 mr-2" />
+                        Generate Video dengan AI
+                      </>
+                    )}
                   </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => window.location.reload()}
-                    className="w-full"
-                  >
-                    <Film className="w-4 h-4 mr-2" />
-                    Buat Video Baru
-                  </Button>
-                </div>
-              </motion.div>
-            )}
-          </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={handleRegenerate}
+                      className="w-full"
+                    >
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Coba Lagi
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => window.location.reload()}
+                      className="w-full"
+                    >
+                      <Film className="w-4 h-4 mr-2" />
+                      Buat Video Baru
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </motion.div>
       </div>
     </div>
