@@ -1,7 +1,19 @@
 import { useState, useRef } from 'react';
-import { motion } from 'framer-motion';
-import { Play, Pause, Volume2, VolumeX, Maximize, Download, RotateCcw } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Play, Pause, Volume2, VolumeX, Maximize, Download, RotateCcw, Info, ChevronDown, ChevronUp, Film, Palette, Clock, Ratio, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+
+export interface VideoMetadata {
+  videoType: string;
+  videoTypeLabel: string;
+  style: string;
+  styleLabel: string;
+  duration: string;
+  durationLabel: string;
+  format: string;
+  formatLabel: string;
+  userPrompt: string;
+}
 
 interface VideoResultProps {
   videoUrl: string;
@@ -9,6 +21,7 @@ interface VideoResultProps {
   onDownload: () => void;
   onRegenerate: () => void;
   isDemo?: boolean;
+  metadata?: VideoMetadata;
 }
 
 export const VideoResult = ({ 
@@ -16,13 +29,15 @@ export const VideoResult = ({
   thumbnailUrl, 
   onDownload, 
   onRegenerate,
-  isDemo = true 
+  isDemo = true,
+  metadata
 }: VideoResultProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [progress, setProgress] = useState(0);
+  const [showMetadata, setShowMetadata] = useState(true);
 
   const togglePlay = () => {
     if (videoRef.current) {
@@ -181,6 +196,104 @@ export const VideoResult = ({
         </motion.div>
       </div>
 
+      {/* Metadata Panel */}
+      {metadata && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="bg-muted/30 rounded-xl border border-border overflow-hidden"
+        >
+          {/* Panel Header */}
+          <button
+            onClick={() => setShowMetadata(!showMetadata)}
+            className="w-full flex items-center justify-between p-3 hover:bg-muted/50 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <Info className="w-4 h-4 text-primary" />
+              <span className="text-sm font-semibold">Detail Konfigurasi Video</span>
+            </div>
+            {showMetadata ? (
+              <ChevronUp className="w-4 h-4 text-muted-foreground" />
+            ) : (
+              <ChevronDown className="w-4 h-4 text-muted-foreground" />
+            )}
+          </button>
+
+          <AnimatePresence>
+            {showMetadata && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                <div className="p-4 pt-0 space-y-3">
+                  {/* Grid of metadata items */}
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Video Type */}
+                    <div className="bg-background/50 rounded-lg p-3 space-y-1">
+                      <div className="flex items-center gap-1.5 text-muted-foreground">
+                        <Film className="w-3.5 h-3.5" />
+                        <span className="text-xs font-medium">Tujuan Video</span>
+                      </div>
+                      <p className="text-sm font-semibold">{metadata.videoTypeLabel}</p>
+                    </div>
+
+                    {/* Style */}
+                    <div className="bg-background/50 rounded-lg p-3 space-y-1">
+                      <div className="flex items-center gap-1.5 text-muted-foreground">
+                        <Palette className="w-3.5 h-3.5" />
+                        <span className="text-xs font-medium">Gaya Visual</span>
+                      </div>
+                      <p className="text-sm font-semibold">{metadata.styleLabel}</p>
+                    </div>
+
+                    {/* Duration */}
+                    <div className="bg-background/50 rounded-lg p-3 space-y-1">
+                      <div className="flex items-center gap-1.5 text-muted-foreground">
+                        <Clock className="w-3.5 h-3.5" />
+                        <span className="text-xs font-medium">Durasi</span>
+                      </div>
+                      <p className="text-sm font-semibold">{metadata.durationLabel}</p>
+                    </div>
+
+                    {/* Format */}
+                    <div className="bg-background/50 rounded-lg p-3 space-y-1">
+                      <div className="flex items-center gap-1.5 text-muted-foreground">
+                        <Ratio className="w-3.5 h-3.5" />
+                        <span className="text-xs font-medium">Aspect Ratio</span>
+                      </div>
+                      <p className="text-sm font-semibold">{metadata.formatLabel}</p>
+                    </div>
+                  </div>
+
+                  {/* User Description */}
+                  <div className="bg-background/50 rounded-lg p-3 space-y-1.5">
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                      <FileText className="w-3.5 h-3.5" />
+                      <span className="text-xs font-medium">Deskripsi Anda</span>
+                    </div>
+                    <p className="text-sm text-foreground line-clamp-3">{metadata.userPrompt}</p>
+                  </div>
+
+                  {/* Demo Explanation */}
+                  {isDemo && (
+                    <div className="bg-warning/10 border border-warning/20 rounded-lg p-3">
+                      <p className="text-xs text-warning leading-relaxed">
+                        <strong>Mode Demo:</strong> Video yang ditampilkan adalah placeholder yang dipilih berdasarkan konfigurasi Anda. 
+                        Metadata di atas menunjukkan parameter yang akan digunakan AI sebenarnya untuk menghasilkan video custom sesuai permintaan.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
+      )}
+
       {/* Action Buttons */}
       <div className="space-y-3">
         <Button
@@ -201,8 +314,8 @@ export const VideoResult = ({
         </Button>
       </div>
 
-      {/* Technical Info (collapsed by default in production) */}
-      {isDemo && (
+      {/* Technical Info - only show if no metadata panel */}
+      {isDemo && !metadata && (
         <div className="text-center">
           <p className="text-xs text-muted-foreground">
             Video placeholder untuk demo. Arsitektur siap untuk API AI Video asli.
