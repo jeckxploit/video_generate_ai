@@ -2,10 +2,10 @@ import { motion } from 'framer-motion';
 import { Play, Download, RefreshCw, Check, Sparkles, Film, AlertCircle, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { WizardData } from '@/types/wizard';
-import { videoStyles } from '@/data/wizardOptions';
+import { videoStyles, videoTypes, videoDurations, videoFormats } from '@/data/wizardOptions';
 import { analyzeConfiguration, getDetailedSummary } from '@/lib/promptGenerator';
 import { ConflictWarning } from './ConflictWarning';
-import { VideoResult } from './VideoResult';
+import { VideoResult, VideoMetadata } from './VideoResult';
 import { useVideoGeneration } from '@/hooks/useVideoGeneration';
 
 interface StepPreviewProps {
@@ -28,6 +28,9 @@ export const StepPreview = ({ data }: StepPreviewProps) => {
   const analysis = analyzeConfiguration(data);
   const detailedSummary = getDetailedSummary(data);
   const selectedStyle = videoStyles.find((s) => s.id === data.style);
+  const selectedType = videoTypes.find((t) => t.id === data.videoType);
+  const selectedDuration = videoDurations.find((d) => d.id === data.duration);
+  const selectedFormat = videoFormats.find((f) => f.id === data.format);
 
   const isGenerating = job?.status === 'pending' || job?.status === 'processing';
   const isCompleted = job?.status === 'completed';
@@ -39,6 +42,19 @@ export const StepPreview = ({ data }: StepPreviewProps) => {
     Math.floor((progress / 100) * loadingMessages.length),
     loadingMessages.length - 1
   );
+
+  // Build metadata for VideoResult
+  const videoMetadata: VideoMetadata = {
+    videoType: data.videoType || '',
+    videoTypeLabel: selectedType?.title || 'Tidak dipilih',
+    style: data.style || '',
+    styleLabel: selectedStyle?.title || 'Tidak dipilih',
+    duration: data.duration || '',
+    durationLabel: selectedDuration?.label || 'Tidak dipilih',
+    format: data.format || '',
+    formatLabel: selectedFormat ? `${selectedFormat.label} (${selectedFormat.ratio})` : 'Tidak dipilih',
+    userPrompt: data.prompt || '',
+  };
 
   const handleGenerate = async () => {
     try {
@@ -192,6 +208,7 @@ export const StepPreview = ({ data }: StepPreviewProps) => {
                 onDownload={handleDownload}
                 onRegenerate={handleRegenerate}
                 isDemo={true}
+                metadata={videoMetadata}
               />
             </div>
           ) : (
