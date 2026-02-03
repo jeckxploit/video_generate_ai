@@ -100,73 +100,180 @@ function validateInput(payload: unknown): ValidationResult {
 }
 
 // ============================================
-// PROMPT GENERATION
-// Combines all inputs into a clean, structured prompt for AI
+// PROMPT NORMALIZER
+// Converts user input into clean, consistent English prompt
 // ============================================
 
-const VIDEO_TYPE_PROMPTS: Record<string, string> = {
-  promotional: "Create a compelling promotional video that drives engagement and brand awareness",
-  explainer: "Create an educational explainer video that clearly communicates complex concepts",
-  social: "Create a dynamic social media video optimized for high engagement and sharing",
-  presentation: "Create a professional presentation video suitable for business and educational contexts",
-  story: "Create an emotionally engaging storytelling video with a clear narrative arc",
-  tutorial: "Create a step-by-step tutorial video that is easy to follow and understand",
+const MAX_USER_PROMPT_LENGTH = 200;
+const MAX_FINAL_PROMPT_LENGTH = 500;
+
+// Type mappings to English descriptors
+const VIDEO_TYPE_ENGLISH: Record<string, string> = {
+  promotional: "promotional",
+  explainer: "educational explainer",
+  social: "social media",
+  presentation: "presentation",
+  story: "storytelling",
+  tutorial: "tutorial",
 };
 
-const STYLE_PROMPTS: Record<string, string> = {
-  modern: "Use a modern, clean aesthetic with minimalist design, bold typography, and smooth transitions",
-  cinematic: "Apply cinematic quality with dramatic lighting, professional color grading, and film-like camera movements",
-  playful: "Incorporate playful elements with bright colors, bouncy animations, and cheerful visual effects",
-  corporate: "Maintain a professional corporate look with refined colors, structured layouts, and formal presentation",
-  retro: "Apply vintage aesthetics with film grain, nostalgic color palettes, and classic visual effects",
-  futuristic: "Use futuristic sci-fi elements with neon accents, holographic effects, and high-tech visuals",
+// Style mappings to English descriptors
+const STYLE_ENGLISH: Record<string, string> = {
+  modern: "modern clean style",
+  cinematic: "cinematic",
+  playful: "playful animated",
+  corporate: "professional corporate",
+  retro: "retro vintage",
+  futuristic: "futuristic sci-fi",
 };
 
-const DURATION_SPECS: Record<string, { seconds: number; description: string }> = {
-  short: { seconds: 15, description: "15 seconds, perfect for quick social media content" },
-  medium: { seconds: 30, description: "30 seconds, ideal for advertisements and previews" },
-  standard: { seconds: 60, description: "60 seconds, standard for complete promotional content" },
-  long: { seconds: 120, description: "2 minutes, suitable for detailed explanations" },
+// Duration mappings
+const DURATION_ENGLISH: Record<string, string> = {
+  short: "15 seconds",
+  medium: "30 seconds",
+  standard: "60 seconds",
+  long: "2 minutes",
 };
 
-const FORMAT_SPECS: Record<string, { ratio: string; resolution: string; platform: string }> = {
-  landscape: { ratio: "16:9", resolution: "1920x1080", platform: "YouTube, websites, presentations" },
-  portrait: { ratio: "9:16", resolution: "1080x1920", platform: "TikTok, Instagram Reels, Stories" },
-  square: { ratio: "1:1", resolution: "1080x1080", platform: "Instagram Feed, Facebook" },
+// Format mappings
+const FORMAT_ENGLISH: Record<string, string> = {
+  landscape: "horizontal 16:9",
+  portrait: "vertical 9:16",
+  square: "square 1:1",
 };
 
-function generateFinalPrompt(payload: VideoJobPayload): string {
-  const typePrompt = VIDEO_TYPE_PROMPTS[payload.videoType] || VIDEO_TYPE_PROMPTS.promotional;
-  const stylePrompt = STYLE_PROMPTS[payload.style] || STYLE_PROMPTS.modern;
-  const durationSpec = DURATION_SPECS[payload.duration] || DURATION_SPECS.medium;
-  const formatSpec = FORMAT_SPECS[payload.format] || FORMAT_SPECS.landscape;
+// Camera/motion style based on video type
+const MOTION_STYLE: Record<string, string> = {
+  promotional: "dynamic camera movement",
+  explainer: "smooth transitions",
+  social: "fast-paced editing",
+  presentation: "steady professional shots",
+  story: "cinematic camera flow",
+  tutorial: "clear focused framing",
+};
 
-  const structuredPrompt = `
-[VIDEO GENERATION REQUEST]
+/**
+ * Cleans and normalizes user input text
+ * - Removes excessive whitespace
+ * - Removes special characters that could break prompts
+ * - Truncates to max length
+ * - Basic normalization for consistency
+ */
+function normalizeUserInput(input: string): string {
+  let cleaned = input
+    // Remove multiple spaces/newlines
+    .replace(/\s+/g, " ")
+    // Remove potentially problematic characters
+    .replace(/[<>{}[\]\\]/g, "")
+    // Remove quotes that could break JSON
+    .replace(/["'`]/g, "'")
+    // Trim whitespace
+    .trim();
 
-TYPE: ${payload.videoType.toUpperCase()}
-${typePrompt}
+  // Truncate if too long, but try to end at word boundary
+  if (cleaned.length > MAX_USER_PROMPT_LENGTH) {
+    cleaned = cleaned.substring(0, MAX_USER_PROMPT_LENGTH);
+    const lastSpace = cleaned.lastIndexOf(" ");
+    if (lastSpace > MAX_USER_PROMPT_LENGTH * 0.7) {
+      cleaned = cleaned.substring(0, lastSpace);
+    }
+    cleaned = cleaned.trim();
+  }
 
-VISUAL STYLE: ${payload.style.toUpperCase()}
-${stylePrompt}
+  return cleaned;
+}
 
-SPECIFICATIONS:
-- Duration: ${durationSpec.description}
-- Aspect Ratio: ${formatSpec.ratio}
-- Resolution: ${formatSpec.resolution}
-- Target Platforms: ${formatSpec.platform}
+/**
+ * Extracts key topics/subjects from user prompt
+ * Returns a clean, focused content description
+ */
+function extractContentFocus(userPrompt: string): string {
+  const normalized = normalizeUserInput(userPrompt);
+  
+  // Remove common filler words for more focused prompt
+  const fillerWords = [
+    "tolong", "buatkan", "buat", "saya", "ingin", "mau", "video", "tentang",
+    "please", "create", "make", "want", "need", "about", "the", "a", "an",
+    "yang", "untuk", "dengan", "dan", "atau", "ini", "itu"
+  ];
+  
+  let focused = normalized.toLowerCase();
+  fillerWords.forEach(word => {
+    focused = focused.replace(new RegExp(`\\b${word}\\b`, "gi"), " ");
+  });
+  
+  // Clean up and capitalize first letter
+  focused = focused.replace(/\s+/g, " ").trim();
+  if (focused.length > 0) {
+    focused = focused.charAt(0).toUpperCase() + focused.slice(1);
+  }
+  
+  return focused || normalized;
+}
 
-USER CONTENT BRIEF:
-${payload.userPrompt}
+/**
+ * Generates a normalized, natural English prompt for AI Video API
+ * Format: "[Style] [type] video about [content], duration [X], [format], [motion style]."
+ */
+function generateNormalizedPrompt(payload: VideoJobPayload): string {
+  const style = STYLE_ENGLISH[payload.style] || "modern clean style";
+  const type = VIDEO_TYPE_ENGLISH[payload.videoType] || "promotional";
+  const duration = DURATION_ENGLISH[payload.duration] || "30 seconds";
+  const format = FORMAT_ENGLISH[payload.format] || "horizontal 16:9";
+  const motion = MOTION_STYLE[payload.videoType] || "smooth camera movement";
+  
+  // Extract and clean user content
+  const contentFocus = extractContentFocus(payload.userPrompt);
+  
+  // Build natural English prompt
+  const parts = [
+    `${style.charAt(0).toUpperCase() + style.slice(1)} ${type} video`,
+    contentFocus ? `about ${contentFocus}` : "",
+    `duration ${duration}`,
+    format,
+    motion,
+  ].filter(Boolean);
+  
+  let finalPrompt = parts.join(", ") + ".";
+  
+  // Ensure final prompt doesn't exceed max length
+  if (finalPrompt.length > MAX_FINAL_PROMPT_LENGTH) {
+    // Shorten content focus if needed
+    const maxContentLength = MAX_FINAL_PROMPT_LENGTH - 150; // Reserve space for other parts
+    const shortenedContent = contentFocus.substring(0, maxContentLength);
+    const lastSpace = shortenedContent.lastIndexOf(" ");
+    const truncatedContent = lastSpace > 0 ? shortenedContent.substring(0, lastSpace) : shortenedContent;
+    
+    const shortParts = [
+      `${style.charAt(0).toUpperCase() + style.slice(1)} ${type} video`,
+      truncatedContent ? `about ${truncatedContent}` : "",
+      `duration ${duration}`,
+      format,
+      motion,
+    ].filter(Boolean);
+    
+    finalPrompt = shortParts.join(", ") + ".";
+  }
+  
+  return finalPrompt;
+}
 
-GENERATION INSTRUCTIONS:
-Generate a ${durationSpec.seconds}-second video in ${formatSpec.ratio} format.
-The video should embody the ${payload.style} visual style while serving as a ${payload.videoType} content piece.
-Focus on high visual quality, smooth transitions, and engaging pacing appropriate for the target duration.
-Ensure the content aligns with the user's brief while maintaining professional production standards.
+/**
+ * Generates detailed prompt for internal logging/storage
+ * This is NOT sent to the AI API
+ */
+function generateDetailedPrompt(payload: VideoJobPayload): string {
+  return `
+[INTERNAL REFERENCE - NOT FOR AI API]
+Type: ${payload.videoType}
+Style: ${payload.style}
+Duration: ${payload.duration}
+Format: ${payload.format}
+Original User Input: ${payload.userPrompt}
+---
+NORMALIZED AI PROMPT:
+${generateNormalizedPrompt(payload)}
 `.trim();
-
-  return structuredPrompt;
 }
 
 // ============================================
@@ -536,9 +643,11 @@ serve(async (req) => {
       const payload = validation.sanitizedPayload!;
       console.log("[API] Received validated job submission:", payload.userPrompt.slice(0, 50) + "...");
 
-      // Generate the final prompt for AI
-      const finalPrompt = generateFinalPrompt(payload);
-      console.log("[API] Generated final prompt length:", finalPrompt.length);
+      // Generate the normalized prompt for AI API
+      const normalizedPrompt = generateNormalizedPrompt(payload);
+      const detailedPrompt = generateDetailedPrompt(payload);
+      console.log("[API] Normalized prompt:", normalizedPrompt);
+      console.log("[API] Prompt length:", normalizedPrompt.length);
 
       // Create job in database with generated prompt
       const { data: job, error: insertError } = await supabase
@@ -550,7 +659,7 @@ serve(async (req) => {
           duration: payload.duration,
           format: payload.format,
           user_prompt: payload.userPrompt,
-          generated_prompt: finalPrompt,
+          generated_prompt: detailedPrompt, // Store detailed version for reference
           status: "pending",
           progress: 0,
         })
@@ -564,10 +673,10 @@ serve(async (req) => {
 
       console.log("[API] Job created:", job.id);
 
-      // Prepare payload with generated prompt for processing
+      // Prepare payload with normalized prompt for AI processing
       const processingPayload: VideoJobPayload = {
         ...payload,
-        generatedPrompt: finalPrompt,
+        generatedPrompt: normalizedPrompt, // Use normalized prompt for AI API
       };
 
       // Start background processing
@@ -580,7 +689,7 @@ serve(async (req) => {
           success: true,
           jobId: job.id,
           message: "Video generation started",
-          promptPreview: finalPrompt.slice(0, 200) + "...",
+          normalizedPrompt: normalizedPrompt, // Show the clean prompt to frontend
           isDemo: !Deno.env.get("AI_VIDEO_API_KEY"),
         }),
         {
