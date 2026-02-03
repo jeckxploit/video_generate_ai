@@ -1,9 +1,9 @@
 import { motion } from 'framer-motion';
-import { Play, Download, RefreshCw, Check, Sparkles, Film, AlertCircle, Zap } from 'lucide-react';
+import { Play, Download, RefreshCw, Check, Sparkles, Film, AlertCircle, Zap, MessageSquareQuote } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { WizardData } from '@/types/wizard';
 import { videoStyles, videoTypes, videoDurations, videoFormats } from '@/data/wizardOptions';
-import { analyzeConfiguration, getDetailedSummary } from '@/lib/promptGenerator';
+import { analyzeConfiguration, getDetailedSummary, getNaturalLanguagePrompt } from '@/lib/promptGenerator';
 import { ConflictWarning } from './ConflictWarning';
 import { VideoResult, VideoMetadata } from './VideoResult';
 import { useVideoGeneration } from '@/hooks/useVideoGeneration';
@@ -27,6 +27,7 @@ export const StepPreview = ({ data }: StepPreviewProps) => {
   // Use the enhanced AI analysis
   const analysis = analyzeConfiguration(data);
   const detailedSummary = getDetailedSummary(data);
+  const naturalLanguagePrompt = getNaturalLanguagePrompt(data);
   const selectedStyle = videoStyles.find((s) => s.id === data.style);
   const selectedType = videoTypes.find((t) => t.id === data.videoType);
   const selectedDuration = videoDurations.find((d) => d.id === data.duration);
@@ -111,6 +112,32 @@ export const StepPreview = ({ data }: StepPreviewProps) => {
           )}
         </div>
       )}
+
+      {/* AI Prompt Preview Panel */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+        className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border border-primary/20 rounded-xl p-4"
+      >
+        <div className="flex items-start gap-3">
+          <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
+            <MessageSquareQuote className="w-5 h-5 text-primary" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-2">
+              <h3 className="text-sm font-semibold text-foreground">AI Prompt Preview</h3>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">Read-only</span>
+            </div>
+            <p className="text-sm text-foreground leading-relaxed italic">
+              "{naturalLanguagePrompt}"
+            </p>
+            <p className="text-xs text-muted-foreground mt-2">
+              Ini adalah ringkasan prompt yang akan diproses AI untuk menghasilkan video Anda.
+            </p>
+          </div>
+        </div>
+      </motion.div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Summary Card - User Friendly */}

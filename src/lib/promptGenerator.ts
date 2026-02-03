@@ -523,6 +523,54 @@ export const getUserFriendlySummary = (data: WizardData): string => {
   return `${selectedType?.title} dengan gaya ${selectedStyle?.title?.toLowerCase()}, durasi ${selectedDuration?.label}, format ${selectedFormat?.ratio}`;
 };
 
+// ============================================
+// NATURAL LANGUAGE PROMPT PREVIEW
+// ============================================
+
+export const getNaturalLanguagePrompt = (data: WizardData): string => {
+  const selectedType = videoTypes.find(t => t.id === data.videoType);
+  const selectedStyle = videoStyles.find(s => s.id === data.style);
+  const selectedDuration = videoDurations.find(d => d.id === data.duration);
+  const selectedFormat = videoFormats.find(f => f.id === data.format);
+  
+  // Get human-readable format description
+  const formatDescription = selectedFormat?.id === 'portrait' 
+    ? `format vertikal ${selectedFormat?.ratio}` 
+    : selectedFormat?.id === 'landscape' 
+      ? `format horizontal ${selectedFormat?.ratio}`
+      : `format ${selectedFormat?.label?.toLowerCase()} ${selectedFormat?.ratio}`;
+  
+  // Get style description in natural language
+  const styleMap: Record<string, string> = {
+    modern: 'gaya modern clean',
+    cinematic: 'gaya sinematik dramatis',
+    playful: 'gaya playful dan ceria',
+    corporate: 'gaya profesional corporate',
+    retro: 'gaya retro vintage',
+    futuristic: 'gaya futuristik high-tech',
+  };
+  const styleDescription = styleMap[data.style || ''] || `gaya ${selectedStyle?.title?.toLowerCase()}`;
+  
+  // Get type description
+  const typeMap: Record<string, string> = {
+    promotional: 'Video promosi',
+    explainer: 'Video explainer',
+    social: 'Video social media',
+    presentation: 'Video presentasi',
+    story: 'Video storytelling',
+    tutorial: 'Video tutorial',
+  };
+  const typeDescription = typeMap[data.videoType || ''] || `Video ${selectedType?.title?.toLowerCase()}`;
+  
+  // Get user prompt summary (first 100 chars if too long)
+  const userPromptSummary = data.prompt.length > 100 
+    ? data.prompt.substring(0, 100).trim() + '...'
+    : data.prompt;
+  
+  // Build natural language prompt
+  return `${typeDescription} berdurasi ${selectedDuration?.label}, ${formatDescription}, ${styleDescription}, ${userPromptSummary.toLowerCase().startsWith('tentang') ? '' : 'tentang '}${userPromptSummary.charAt(0).toLowerCase() + userPromptSummary.slice(1)}`;
+};
+
 export const getDetailedSummary = (data: WizardData): string[] => {
   const selectedType = videoTypes.find(t => t.id === data.videoType);
   const selectedStyle = videoStyles.find(s => s.id === data.style);
