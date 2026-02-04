@@ -8,6 +8,178 @@ const corsHeaders = {
 };
 
 // ============================================
+// ERROR HANDLING SYSTEM
+// ============================================
+
+// Error codes for categorization
+enum ErrorCode {
+  VALIDATION_ERROR = "VALIDATION_ERROR",
+  INVALID_PROMPT = "INVALID_PROMPT",
+  RATE_LIMIT = "RATE_LIMIT",
+  API_TIMEOUT = "API_TIMEOUT",
+  API_FAILURE = "API_FAILURE",
+  SERVICE_UNAVAILABLE = "SERVICE_UNAVAILABLE",
+  INTERNAL_ERROR = "INTERNAL_ERROR",
+  JOB_NOT_FOUND = "JOB_NOT_FOUND",
+  INVALID_JOB_ID = "INVALID_JOB_ID",
+}
+
+// User-friendly error messages (safe to display)
+const USER_FRIENDLY_MESSAGES: Record<ErrorCode, string> = {
+  [ErrorCode.VALIDATION_ERROR]: "Data yang dikirim tidak valid. Silakan periksa konfigurasi video Anda.",
+  [ErrorCode.INVALID_PROMPT]: "Deskripsi video tidak valid. Pastikan deskripsi minimal 10 karakter dan tidak mengandung konten yang tidak diizinkan.",
+  [ErrorCode.RATE_LIMIT]: "Terlalu banyak permintaan. Silakan tunggu beberapa saat sebelum mencoba lagi.",
+  [ErrorCode.API_TIMEOUT]: "Pembuatan video memakan waktu terlalu lama. Silakan coba lagi.",
+  [ErrorCode.API_FAILURE]: "Terjadi kendala saat membuat video. Tim kami sedang menangani masalah ini.",
+  [ErrorCode.SERVICE_UNAVAILABLE]: "Layanan pembuatan video sedang dalam pemeliharaan. Silakan coba lagi nanti.",
+  [ErrorCode.INTERNAL_ERROR]: "Terjadi kesalahan sistem. Silakan coba lagi atau hubungi dukungan.",
+  [ErrorCode.JOB_NOT_FOUND]: "Video tidak ditemukan. Mungkin sudah kadaluarsa atau ID tidak valid.",
+  [ErrorCode.INVALID_JOB_ID]: "Format ID video tidak valid.",
+};
+
+// Custom error class for video generation
+class VideoGenerationError extends Error {
+  code: ErrorCode;
+  userMessage: string;
+  statusCode: number;
+  retryable: boolean;
+  retryAfterSeconds?: number;
+
+  constructor(
+    code: ErrorCode,
+    technicalMessage: string,
+    options?: {
+      statusCode?: number;
+      retryable?: boolean;
+      retryAfterSeconds?: number;
+      userMessage?: string;
+    }
+  ) {
+    super(technicalMessage);
+    this.name = "VideoGenerationError";
+    this.code = code;
+    this.userMessage = options?.userMessage || USER_FRIENDLY_MESSAGES[code];
+    this.statusCode = options?.statusCode || 500;
+    this.retryable = options?.retryable ?? false;
+    this.retryAfterSeconds = options?.retryAfterSeconds;
+  }
+
+  toSafeResponse() {
+    return {
+      success: false,
+      error: {
+        code: this.code,
+        message: this.userMessage,
+        retryable: this.retryable,
+        ...(this.retryAfterSeconds && { retryAfterSeconds: this.retryAfterSeconds }),
+      },
+    };
+  }
+}
+
+// Helper to create safe error responses
+function createErrorResponse(
+  error: unknown,
+  defaultCode: ErrorCode = ErrorCode.INTERNAL_ERROR
+): { response: VideoGenerationError; logMessage: string } {
+  if (error instanceof VideoGenerationError) {
+    return {
+      response: error,
+      logMessage: `[${error.code}] ${error.message}`,
+    };
+  }
+
+  // Handle timeout errors
+  if (error instanceof Error) {
+    if (error.name === "AbortError" || error.message.includes("timeout")) {
+      return {
+        response: new VideoGenerationError(
+          ErrorCode.API_TIMEOUT,
+          error.message,
+          { statusCode: 504, retryable: true, retryAfterSeconds: 30 }
+        ),
+        logMessage: `[TIMEOUT] ${error.message}`,
+      };
+    }
+
+    // Handle rate limit errors (common patterns from APIs)
+    if (
+      error.message.includes("rate limit") ||
+      error.message.includes("429") ||
+      error.message.includes("too many requests")
+    ) {
+      return {
+        response: new VideoGenerationError(
+          ErrorCode.RATE_LIMIT,
+          error.message,
+          { statusCode: 429, retryable: true, retryAfterSeconds: 60 }
+        ),
+        logMessage: `[RATE_LIMIT] ${error.message}`,
+      };
+    }
+
+    // Handle service unavailable
+    if (
+      error.message.includes("503") ||
+      error.message.includes("service unavailable") ||
+      error.message.includes("maintenance")
+    ) {
+      return {
+        response: new VideoGenerationError(
+          ErrorCode.SERVICE_UNAVAILABLE,
+          error.message,
+          { statusCode: 503, retryable: true, retryAfterSeconds: 300 }
+        ),
+        logMessage: `[SERVICE_UNAVAILABLE] ${error.message}`,
+      };
+    }
+  }
+
+  // Default internal error
+  const message = error instanceof Error ? error.message : "Unknown error";
+  return {
+    response: new VideoGenerationError(defaultCode, message, { statusCode: 500 }),
+    logMessage: `[INTERNAL] ${message}`,
+  };
+}
+
+// Rate limiting storage (in-memory for edge function)
+const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+const RATE_LIMIT_MAX_REQUESTS = 5; // 5 requests per minute per session
+
+function checkRateLimit(sessionId: string): { allowed: boolean; retryAfterSeconds?: number } {
+  const now = Date.now();
+  const record = rateLimitStore.get(sessionId);
+
+  // Clean up expired entries
+  if (record && record.resetAt < now) {
+    rateLimitStore.delete(sessionId);
+  }
+
+  const current = rateLimitStore.get(sessionId);
+
+  if (!current) {
+    rateLimitStore.set(sessionId, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return { allowed: true };
+  }
+
+  if (current.count >= RATE_LIMIT_MAX_REQUESTS) {
+    const retryAfterSeconds = Math.ceil((current.resetAt - now) / 1000);
+    return { allowed: false, retryAfterSeconds };
+  }
+
+  current.count++;
+  return { allowed: true };
+}
+
+// Validate UUID format
+function isValidUUID(str: string): boolean {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(str);
+}
+
+// ============================================
 // INPUT VALIDATION SCHEMA
 // ============================================
 
@@ -15,6 +187,14 @@ const VALID_VIDEO_TYPES = ["promotional", "explainer", "social", "presentation",
 const VALID_STYLES = ["modern", "cinematic", "playful", "corporate", "retro", "futuristic"] as const;
 const VALID_DURATIONS = ["short", "medium", "standard", "long"] as const;
 const VALID_FORMATS = ["landscape", "portrait", "square"] as const;
+
+// Forbidden patterns in prompts (safety filter)
+const FORBIDDEN_PATTERNS = [
+  /\b(hack|exploit|malware|virus)\b/i,
+  /\b(weapon|bomb|explosive)\b/i,
+  /<script|javascript:|data:/i,
+  /\x00|\x1f/g, // Control characters
+];
 
 interface VideoJobPayload {
   sessionId: string;
@@ -29,6 +209,7 @@ interface VideoJobPayload {
 interface ValidationResult {
   valid: boolean;
   errors: string[];
+  errorCode?: ErrorCode;
   sanitizedPayload?: VideoJobPayload;
 }
 
@@ -40,50 +221,80 @@ function validateInput(payload: unknown): ValidationResult {
   const errors: string[] = [];
 
   if (!payload || typeof payload !== "object") {
-    return { valid: false, errors: ["Invalid request body"] };
+    return { 
+      valid: false, 
+      errors: ["Data permintaan tidak valid"], 
+      errorCode: ErrorCode.VALIDATION_ERROR 
+    };
   }
 
   const data = payload as Record<string, unknown>;
 
   // Required fields validation
   if (!data.sessionId || typeof data.sessionId !== "string") {
-    errors.push("sessionId is required and must be a string");
+    errors.push("Session ID diperlukan");
   }
 
   if (!data.videoType || typeof data.videoType !== "string") {
-    errors.push("videoType is required and must be a string");
+    errors.push("Tipe video harus dipilih");
   } else if (!VALID_VIDEO_TYPES.includes(data.videoType as typeof VALID_VIDEO_TYPES[number])) {
-    errors.push(`videoType must be one of: ${VALID_VIDEO_TYPES.join(", ")}`);
+    errors.push("Tipe video yang dipilih tidak valid");
   }
 
   if (!data.style || typeof data.style !== "string") {
-    errors.push("style is required and must be a string");
+    errors.push("Gaya visual harus dipilih");
   } else if (!VALID_STYLES.includes(data.style as typeof VALID_STYLES[number])) {
-    errors.push(`style must be one of: ${VALID_STYLES.join(", ")}`);
+    errors.push("Gaya visual yang dipilih tidak valid");
   }
 
   if (!data.duration || typeof data.duration !== "string") {
-    errors.push("duration is required and must be a string");
+    errors.push("Durasi video harus dipilih");
   } else if (!VALID_DURATIONS.includes(data.duration as typeof VALID_DURATIONS[number])) {
-    errors.push(`duration must be one of: ${VALID_DURATIONS.join(", ")}`);
+    errors.push("Durasi yang dipilih tidak valid");
   }
 
   if (!data.format || typeof data.format !== "string") {
-    errors.push("format is required and must be a string");
+    errors.push("Format video harus dipilih");
   } else if (!VALID_FORMATS.includes(data.format as typeof VALID_FORMATS[number])) {
-    errors.push(`format must be one of: ${VALID_FORMATS.join(", ")}`);
+    errors.push("Format yang dipilih tidak valid");
   }
 
+  // Prompt validation with enhanced checks
   if (!data.userPrompt || typeof data.userPrompt !== "string") {
-    errors.push("userPrompt is required and must be a string");
-  } else if (data.userPrompt.length < 10) {
-    errors.push("userPrompt must be at least 10 characters");
-  } else if (data.userPrompt.length > 2000) {
-    errors.push("userPrompt must not exceed 2000 characters");
+    errors.push("Deskripsi video diperlukan");
+  } else {
+    const prompt = String(data.userPrompt).trim();
+    
+    if (prompt.length < 10) {
+      return {
+        valid: false,
+        errors: ["Deskripsi video minimal 10 karakter"],
+        errorCode: ErrorCode.INVALID_PROMPT,
+      };
+    }
+    
+    if (prompt.length > 2000) {
+      return {
+        valid: false,
+        errors: ["Deskripsi video maksimal 2000 karakter"],
+        errorCode: ErrorCode.INVALID_PROMPT,
+      };
+    }
+
+    // Check for forbidden patterns
+    for (const pattern of FORBIDDEN_PATTERNS) {
+      if (pattern.test(prompt)) {
+        return {
+          valid: false,
+          errors: ["Deskripsi mengandung konten yang tidak diizinkan"],
+          errorCode: ErrorCode.INVALID_PROMPT,
+        };
+      }
+    }
   }
 
   if (errors.length > 0) {
-    return { valid: false, errors };
+    return { valid: false, errors, errorCode: ErrorCode.VALIDATION_ERROR };
   }
 
   // Sanitize input
@@ -536,7 +747,7 @@ function getVideoService(): VideoGenerationService {
 }
 
 // ============================================
-// JOB PROCESSOR
+// JOB PROCESSOR WITH ENHANCED ERROR HANDLING
 // ============================================
 
 async function processVideoJob(supabase: any, jobId: string, payload: VideoJobPayload) {
@@ -551,7 +762,7 @@ async function processVideoJob(supabase: any, jobId: string, payload: VideoJobPa
       .update({ status: "processing", progress: 0 })
       .eq("id", jobId);
 
-    // Progress callback for the service
+    // Progress callback for the service with timeout protection
     const onProgress = async (progress: number) => {
       const { error } = await supabase
         .from("video_jobs")
@@ -563,8 +774,22 @@ async function processVideoJob(supabase: any, jobId: string, payload: VideoJobPa
       }
     };
 
-    // Generate video
-    const result = await videoService.generate(jobId, payload, onProgress);
+    // Generate video with timeout protection
+    const GENERATION_TIMEOUT = 120000; // 2 minutes
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(new VideoGenerationError(
+          ErrorCode.API_TIMEOUT,
+          "Video generation exceeded maximum time limit",
+          { statusCode: 504, retryable: true, retryAfterSeconds: 30 }
+        ));
+      }, GENERATION_TIMEOUT);
+    });
+
+    const result = await Promise.race([
+      videoService.generate(jobId, payload, onProgress),
+      timeoutPromise,
+    ]);
 
     // Mark as completed
     const { error: completeError } = await supabase
@@ -579,29 +804,34 @@ async function processVideoJob(supabase: any, jobId: string, payload: VideoJobPa
       .eq("id", jobId);
 
     if (completeError) {
-      throw completeError;
+      throw new VideoGenerationError(
+        ErrorCode.INTERNAL_ERROR,
+        `Database error: ${completeError.message}`
+      );
     }
 
     console.log(`[Processor] Job ${jobId} completed successfully`);
     return result;
 
   } catch (error) {
-    console.error(`[Processor] Job ${jobId} failed:`, error);
+    const { response: errorResponse, logMessage } = createErrorResponse(error);
+    console.error(`[Processor] Job ${jobId} failed: ${logMessage}`);
     
+    // Store user-friendly error message in database
     await supabase
       .from("video_jobs")
       .update({
         status: "failed",
-        error_message: error instanceof Error ? error.message : "Unknown error",
+        error_message: errorResponse.userMessage,
       })
       .eq("id", jobId);
 
-    throw error;
+    throw errorResponse;
   }
 }
 
 // ============================================
-// HTTP HANDLER
+// HTTP HANDLER WITH COMPREHENSIVE ERROR HANDLING
 // ============================================
 
 serve(async (req) => {
@@ -621,26 +851,48 @@ serve(async (req) => {
 
     // ========== SUBMIT NEW JOB ==========
     if (req.method === "POST" && action === "submit") {
-      const rawPayload = await req.json();
+      let rawPayload;
+      try {
+        rawPayload = await req.json();
+      } catch {
+        throw new VideoGenerationError(
+          ErrorCode.VALIDATION_ERROR,
+          "Invalid JSON body",
+          { statusCode: 400 }
+        );
+      }
       
       // Validate input
       const validation = validateInput(rawPayload);
       if (!validation.valid) {
         console.error("[API] Validation failed:", validation.errors);
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error: "Validation failed",
-            details: validation.errors,
-          }),
-          {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+        throw new VideoGenerationError(
+          validation.errorCode || ErrorCode.VALIDATION_ERROR,
+          validation.errors.join(", "),
+          { 
+            statusCode: 400,
+            userMessage: validation.errors[0] || USER_FRIENDLY_MESSAGES[ErrorCode.VALIDATION_ERROR],
           }
         );
       }
 
       const payload = validation.sanitizedPayload!;
+      
+      // Check rate limit
+      const rateCheck = checkRateLimit(payload.sessionId);
+      if (!rateCheck.allowed) {
+        console.warn(`[API] Rate limit exceeded for session: ${payload.sessionId}`);
+        throw new VideoGenerationError(
+          ErrorCode.RATE_LIMIT,
+          `Rate limit exceeded for session ${payload.sessionId}`,
+          { 
+            statusCode: 429, 
+            retryable: true, 
+            retryAfterSeconds: rateCheck.retryAfterSeconds,
+          }
+        );
+      }
+
       console.log("[API] Received validated job submission:", payload.userPrompt.slice(0, 50) + "...");
 
       // Generate the normalized prompt for AI API
@@ -659,7 +911,7 @@ serve(async (req) => {
           duration: payload.duration,
           format: payload.format,
           user_prompt: payload.userPrompt,
-          generated_prompt: detailedPrompt, // Store detailed version for reference
+          generated_prompt: detailedPrompt,
           status: "pending",
           progress: 0,
         })
@@ -668,7 +920,10 @@ serve(async (req) => {
 
       if (insertError) {
         console.error("[API] Error creating job:", insertError);
-        throw insertError;
+        throw new VideoGenerationError(
+          ErrorCode.INTERNAL_ERROR,
+          `Database insert error: ${insertError.message}`
+        );
       }
 
       console.log("[API] Job created:", job.id);
@@ -676,20 +931,21 @@ serve(async (req) => {
       // Prepare payload with normalized prompt for AI processing
       const processingPayload: VideoJobPayload = {
         ...payload,
-        generatedPrompt: normalizedPrompt, // Use normalized prompt for AI API
+        generatedPrompt: normalizedPrompt,
       };
 
       // Start background processing
       processVideoJob(supabase, job.id, processingPayload).catch((err) => {
-        console.error("[API] Background processing error:", err);
+        const { logMessage } = createErrorResponse(err);
+        console.error(`[API] Background processing error: ${logMessage}`);
       });
 
       return new Response(
         JSON.stringify({
           success: true,
           jobId: job.id,
-          message: "Video generation started",
-          normalizedPrompt: normalizedPrompt, // Show the clean prompt to frontend
+          message: "Pembuatan video dimulai",
+          normalizedPrompt: normalizedPrompt,
           isDemo: !Deno.env.get("AI_VIDEO_API_KEY"),
         }),
         {
@@ -703,12 +959,19 @@ serve(async (req) => {
       const jobId = url.searchParams.get("jobId");
       
       if (!jobId) {
-        return new Response(
-          JSON.stringify({ error: "jobId is required" }),
-          {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
+        throw new VideoGenerationError(
+          ErrorCode.VALIDATION_ERROR,
+          "jobId parameter is required",
+          { statusCode: 400, userMessage: "ID video diperlukan" }
+        );
+      }
+
+      // Validate UUID format
+      if (!isValidUUID(jobId)) {
+        throw new VideoGenerationError(
+          ErrorCode.INVALID_JOB_ID,
+          `Invalid UUID format: ${jobId}`,
+          { statusCode: 400 }
         );
       }
 
@@ -720,23 +983,32 @@ serve(async (req) => {
 
       if (fetchError) {
         console.error("[API] Error fetching job:", fetchError);
-        throw fetchError;
-      }
-
-      if (!job) {
-        return new Response(
-          JSON.stringify({ error: "Job not found" }),
-          {
-            status: 404,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
+        throw new VideoGenerationError(
+          ErrorCode.INTERNAL_ERROR,
+          `Database fetch error: ${fetchError.message}`
         );
       }
 
+      if (!job) {
+        throw new VideoGenerationError(
+          ErrorCode.JOB_NOT_FOUND,
+          `Job not found: ${jobId}`,
+          { statusCode: 404 }
+        );
+      }
+
+      // Return safe response without internal details
       return new Response(
         JSON.stringify({
-          ...job,
-          isDemo: true, // Always demo for now
+          id: job.id,
+          status: job.status,
+          progress: job.progress,
+          video_url: job.video_url,
+          thumbnail_url: job.thumbnail_url,
+          error_message: job.error_message, // Already sanitized in processor
+          created_at: job.created_at,
+          completed_at: job.completed_at,
+          isDemo: !Deno.env.get("AI_VIDEO_API_KEY"),
         }),
         {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -745,23 +1017,34 @@ serve(async (req) => {
     }
 
     // ========== INVALID REQUEST ==========
-    return new Response(
-      JSON.stringify({ error: "Invalid action or method" }),
-      {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+    throw new VideoGenerationError(
+      ErrorCode.VALIDATION_ERROR,
+      "Invalid action or method",
+      { statusCode: 400, userMessage: "Permintaan tidak valid" }
     );
 
   } catch (error) {
-    console.error("[API] Edge function error:", error);
+    // Centralized error handling
+    const { response: errorResponse, logMessage } = createErrorResponse(error);
+    console.error(`[API] Error: ${logMessage}`);
+
+    const responseBody = errorResponse.toSafeResponse();
+    
+    // Add Retry-After header for rate limits
+    const headers: Record<string, string> = {
+      ...corsHeaders,
+      "Content-Type": "application/json",
+    };
+    
+    if (errorResponse.retryAfterSeconds) {
+      headers["Retry-After"] = String(errorResponse.retryAfterSeconds);
+    }
+
     return new Response(
-      JSON.stringify({
-        error: error instanceof Error ? error.message : "Unknown error",
-      }),
+      JSON.stringify(responseBody),
       {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: errorResponse.statusCode,
+        headers,
       }
     );
   }
