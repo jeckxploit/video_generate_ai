@@ -1,7 +1,10 @@
 import { Header } from '@/components/layout/Header';
 import { VideoWizard } from '@/components/VideoWizard';
+import { DebugConsole } from '@/components/DebugConsole';
 
 const Index = () => {
+  const isDevelopment = import.meta.env.DEV;
+
   return (
     <div className="min-h-screen bg-background relative overflow-x-hidden">
       {/* Background effects */}
@@ -15,6 +18,9 @@ const Index = () => {
       <main className="relative z-10">
         <VideoWizard />
       </main>
+
+      {/* Debug Console - Development Only */}
+      {isDevelopment && <DebugConsole />}
     </div>
   );
 };

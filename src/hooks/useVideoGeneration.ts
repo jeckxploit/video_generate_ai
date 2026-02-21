@@ -37,9 +37,14 @@ export const useVideoGeneration = () => {
 
     const pollInterval = setInterval(async () => {
       try {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const jobIdParam = job.id;
+        
+        console.log('[VideoGen] Polling status for job:', jobIdParam);
+        
         // Use direct fetch for GET with query params
         const response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-video?action=status&jobId=${job.id}`,
+          `${supabaseUrl}/functions/v1/generate-video?action=status&jobId=${jobIdParam}`,
           {
             method: 'GET',
             headers: {
@@ -49,12 +54,17 @@ export const useVideoGeneration = () => {
           }
         );
 
+        console.log('[VideoGen] Poll response status:', response.status);
+
         if (!response.ok) {
-          throw new Error('Failed to fetch job status');
+          const errorText = await response.text();
+          console.error('[VideoGen] Poll error:', response.status, errorText);
+          throw new Error(`Failed to fetch job status: ${response.status}`);
         }
 
         const jobData = await response.json();
-        
+        console.log('[VideoGen] Job data received:', jobData);
+
         setJob({
           id: jobData.id,
           status: jobData.status as JobStatus,
@@ -74,9 +84,9 @@ export const useVideoGeneration = () => {
           });
         }
       } catch (error) {
-        console.error('Error polling job status:', error);
+        console.error('[VideoGen] Error polling job status:', error);
       }
-    }, 1500);
+    }, 2000);
 
     return () => clearInterval(pollInterval);
   }, [job?.id, job?.status]);
@@ -96,6 +106,7 @@ export const useVideoGeneration = () => {
           filter: `id=eq.${job.id}`,
         },
         (payload) => {
+          console.log('[VideoGen] Realtime update received:', payload);
           const data = payload.new as any;
           setJob({
             id: data.id,
@@ -117,47 +128,70 @@ export const useVideoGeneration = () => {
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[VideoGen] Realtime subscription status:', status);
+      });
 
     return () => {
+      console.log('[VideoGen] Cleaning up realtime subscription');
       supabase.removeChannel(channel);
     };
   }, [job?.id]);
 
   const submitJob = useCallback(async (data: WizardData) => {
     setIsSubmitting(true);
-    
+    console.log('[VideoGen] Starting job submission with data:', {
+      videoType: data.videoType,
+      style: data.style,
+      duration: data.duration,
+      format: data.format,
+      promptLength: data.prompt?.length,
+    });
+
     try {
       const { prompt: generatedPrompt } = generateAutoPrompt(data);
       const sessionId = getSessionId();
+      
+      console.log('[VideoGen] Generated prompt:', generatedPrompt?.slice(0, 100) + '...');
+      console.log('[VideoGen] Session ID:', sessionId);
 
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-video?action=submit`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            sessionId,
-            videoType: data.videoType,
-            style: data.style,
-            duration: data.duration,
-            format: data.format,
-            userPrompt: data.prompt,
-            generatedPrompt,
-          }),
-        }
-      );
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const submitUrl = `${supabaseUrl}/functions/v1/generate-video?action=submit`;
+      
+      console.log('[VideoGen] Submitting to URL:', submitUrl);
+
+      const requestBody = {
+        sessionId,
+        videoType: data.videoType,
+        style: data.style,
+        duration: data.duration,
+        format: data.format,
+        userPrompt: data.prompt,
+        generatedPrompt,
+      };
+      
+      console.log('[VideoGen] Request body:', JSON.stringify(requestBody, null, 2));
+
+      const response = await fetch(submitUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      console.log('[VideoGen] Response status:', response.status);
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to submit job');
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('[VideoGen] Error response:', errorData);
+        throw new Error(errorData.error || `Failed to submit job: ${response.status}`);
       }
 
       const result = await response.json();
-      
+      console.log('[VideoGen] Success response:', result);
+
       setJob({
         id: result.jobId,
         status: 'pending',
@@ -173,9 +207,10 @@ export const useVideoGeneration = () => {
 
       return result.jobId;
     } catch (error) {
-      console.error('Error submitting job:', error);
+      console.error('[VideoGen] Error submitting job:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Terjadi kesalahan.';
       toast.error('Gagal memulai generasi video', {
-        description: error instanceof Error ? error.message : 'Terjadi kesalahan.',
+        description: errorMessage,
       });
       throw error;
     } finally {
