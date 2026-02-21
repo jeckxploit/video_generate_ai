@@ -184,9 +184,26 @@ export const useVideoGeneration = () => {
       console.log('[VideoGen] Response status:', response.status);
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        // Try to get error details
+        let errorData;
+        const errorText = await response.text();
+        console.error('[VideoGen] Error response text:', errorText);
+        
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          errorData = { error: errorText || `HTTP ${response.status}` };
+        }
+        
         console.error('[VideoGen] Error response:', errorData);
-        throw new Error(errorData.error || `Failed to submit job: ${response.status}`);
+        
+        // Extract user-friendly message
+        const errorMessage = errorData.error?.message || 
+                            errorData.error || 
+                            errorData.message ||
+                            `Failed to submit job: ${response.status}`;
+        
+        throw new Error(errorMessage);
       }
 
       const result = await response.json();

@@ -178,8 +178,10 @@ const VALID_DURATIONS = ["short", "medium", "standard", "long"] as const;
 const VALID_FORMATS = ["landscape", "portrait", "square"] as const;
 
 const FORBIDDEN_PATTERNS = [
-  /\b(hack|exploit|malware|virus)\b/i,
-  /\b(weapon|bomb|explosive)\b/i,
+  // Only block if it's an instruction to create harmful content
+  /\b(hack|exploit)\s+(system|network|account|password)\b/i,
+  /\b(make|create|build)\s+(bomb|explosive|weapon)\b/i,
+  /\b(how\s+to)\s+(hack|exploit|crack)\b/i,
   /<script|javascript:|data:/i,
   /\x00|\x1f/g,
 ];
