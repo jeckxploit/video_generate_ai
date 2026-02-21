@@ -334,10 +334,10 @@ function normalizeUserInput(input: string): string {
     .replace(/["'`]/g, "'")
     .trim();
 
-  if (cleaned.length > 200) {
-    cleaned = cleaned.substring(0, 200);
+  if (cleaned.length > 500) {
+    cleaned = cleaned.substring(0, 500);
     const lastSpace = cleaned.lastIndexOf(" ");
-    if (lastSpace > 140) {
+    if (lastSpace > 400) {
       cleaned = cleaned.substring(0, lastSpace);
     }
     cleaned = cleaned.trim();
@@ -346,20 +346,110 @@ function normalizeUserInput(input: string): string {
   return cleaned;
 }
 
+// Enhanced prompt engineering for better video generation
 function generateReplicatePrompt(payload: VideoJobPayload): string {
   const type = VIDEO_TYPE_ENGLISH[payload.videoType] || "promotional video";
   const style = STYLE_ENGLISH[payload.style] || "modern clean style";
   const userContent = normalizeUserInput(payload.userPrompt);
+  
+  // Extract key visual elements from user prompt
+  const visualKeywords = extractVisualKeywords(userContent);
+  
+  // Build detailed, visual-rich prompt for Zeroscope/Stable Video Diffusion
+  const promptStructure = {
+    // Main subject - what we want to see
+    subject: buildSubjectDescription(userContent, type),
+    
+    // Style and aesthetic
+    style: style,
+    
+    // Technical quality modifiers
+    quality: "high quality, professional, detailed, sharp focus, 4K",
+    
+    // Motion and dynamics
+    motion: "smooth motion, natural movement, fluid transitions",
+    
+    // Lighting and atmosphere
+    lighting: "professional lighting, well-lit, clear visibility",
+    
+    // Composition
+    composition: "well-composed, balanced framing, professional cinematography",
+  };
 
-  // Build detailed prompt for Stable Video Diffusion / Zeroscope
+  // Build final prompt with all elements
   const promptParts = [
-    `High quality ${type}`,
-    style,
-    userContent ? `featuring ${userContent}` : "",
-    "smooth motion, professional quality, detailed visuals",
+    promptStructure.subject,
+    promptStructure.style,
+    visualKeywords.length > 0 ? `Visual elements: ${visualKeywords.join(", ")}` : "",
+    promptStructure.quality,
+    promptStructure.motion,
+    promptStructure.lighting,
+    promptStructure.composition,
   ].filter(Boolean);
 
   return promptParts.join(", ");
+}
+
+// Extract visual keywords from user prompt
+function extractVisualKeywords(prompt: string): string[] {
+  const keywords: string[] = [];
+  
+  // Common visual elements to look for
+  const visualPatterns = [
+    /\b(product|produk|item|object)\b/i,
+    /\b(person|man|woman|people|orang)\b/i,
+    /\b(text|title|words|tulisan)\b/i,
+    /\b(color|warna|red|blue|green|yellow)\b/i,
+    /\b(background|latar|scene)\b/i,
+    /\b(animation|animated|gerak)\b/i,
+    /\b(logo|icon|symbol)\b/i,
+    /\b(screen|display|monitor)\b/i,
+  ];
+  
+  for (const pattern of visualPatterns) {
+    const match = prompt.match(pattern);
+    if (match) {
+      keywords.push(match[0]);
+    }
+  }
+  
+  // Add specific nouns from prompt (simple extraction)
+  const words = prompt.split(/\s+/);
+  const nouns = words.filter(word => 
+    word.length > 4 && 
+    /^[a-zA-Z]+$/.test(word) &&
+    !['the', 'and', 'with', 'for', 'that', 'this', 'which', 'have', 'from', 'their', 'would', 'there', 'about', 'into', 'could', 'other', 'than', 'then', 'these', 'been', 'has', 'more', 'when', 'who', 'time', 'been', 'its', 'now', 'will', 'where', 'just', 'get', 'made', 'make', 'like', 'very', 'also', 'back', 'take', 'come', 'make', 'know', 'see', 'look', 'want', 'give', 'use', 'find', 'tell', 'ask', 'work', 'seem', 'feel', 'try', 'leave', 'call'].includes(word.toLowerCase())
+  );
+  
+  keywords.push(...nouns.slice(0, 5)); // Add up to 5 keywords
+  
+  return [...new Set(keywords)]; // Remove duplicates
+}
+
+// Build detailed subject description
+function buildSubjectDescription(userPrompt: string, videoType: string): string {
+  const typeDescriptions: Record<string, string> = {
+    promotional: "A professional promotional video showcasing",
+    explainer: "An educational video explaining",
+    social: "Engaging social media content featuring",
+    presentation: "A professional presentation about",
+    story: "A cinematic story about",
+    tutorial: "A step-by-step tutorial demonstrating",
+  };
+  
+  const typeDesc = typeDescriptions[videoType] || "A video about";
+  
+  // Extract the main topic from user prompt (first sentence or first 50 chars)
+  let mainTopic = userPrompt.split('.')[0]; // First sentence
+  if (mainTopic.length > 50) {
+    mainTopic = mainTopic.substring(0, 50);
+    const lastSpace = mainTopic.lastIndexOf(' ');
+    if (lastSpace > 30) {
+      mainTopic = mainTopic.substring(0, lastSpace);
+    }
+  }
+  
+  return `${typeDesc}: ${mainTopic}`;
 }
 
 function generateDetailedPrompt(payload: VideoJobPayload): string {
@@ -487,7 +577,10 @@ class ReplicateVideoService implements VideoGenerationService {
 
     // Generate prompt for Replicate
     const prompt = generateReplicatePrompt(payload);
+    const negativePrompt = "low quality, blurry, distorted, deformed, ugly, bad anatomy, disfigured, poorly drawn, bad proportions, watermark, signature, text overlay, title";
+    
     console.log(`[ReplicateService] Generated prompt: ${prompt}`);
+    console.log(`[ReplicateService] Negative prompt: ${negativePrompt}`);
 
     // Get aspect ratio based on format
     let aspectRatio = "16:9";
@@ -497,25 +590,27 @@ class ReplicateVideoService implements VideoGenerationService {
       aspectRatio = "1:1";
     }
 
-    // Use Stable Video Diffusion model
-    // Model: stability-ai/stable-video-diffusion or lucataco/zeroscope
+    // Use Zeroscope v2 XL model for better text-to-video
+    // Model: lucataco/zeroscope-v2-xl
     const modelVersion = "lucataco/zeroscope-v2-xl:9f747673945c62801b13b84701c783929c0ee784e4748ec062204894dda1a351";
 
     // Submit generation request
     console.log(`[ReplicateService] Submitting prediction to Replicate...`);
-    
+
     const prediction = await this.makeRequest("/predictions", {
       method: "POST",
       body: JSON.stringify({
         version: modelVersion,
         input: {
           prompt: prompt,
+          negative_prompt: negativePrompt,
           num_frames: 24,
           fps: 8,
           width: payload.format === "landscape" ? 1024 : payload.format === "square" ? 576 : 576,
           height: payload.format === "landscape" ? 576 : payload.format === "square" ? 576 : 1024,
           guidance_scale: 17.5,
           num_inference_steps: 50,
+          seed: Math.floor(Math.random() * 1000000), // Random seed for variety
         },
       }),
     });
