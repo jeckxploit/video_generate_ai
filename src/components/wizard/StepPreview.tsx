@@ -37,7 +37,8 @@ export const StepPreview = ({ data }: StepPreviewProps) => {
   const isCompleted = job?.status === 'completed';
   const isFailed = job?.status === 'failed';
   const progress = job?.progress || 0;
-  
+  const isDemoMode = job?.isDemo === true;
+
   // Calculate loading message based on progress
   const loadingStepIndex = Math.min(
     Math.floor((progress / 100) * loadingMessages.length),
@@ -85,6 +86,40 @@ export const StepPreview = ({ data }: StepPreviewProps) => {
           AI akan membuat video berdasarkan konfigurasi Anda
         </p>
       </div>
+
+      {/* Demo Mode Warning */}
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mx-2 p-4 bg-warning/10 border border-warning/30 rounded-xl"
+      >
+        <div className="flex items-start gap-3">
+          <div className="text-warning text-xl">⚠️</div>
+          <div className="flex-1">
+            <h3 className="text-sm font-semibold text-warning mb-1">
+              Demo Mode - Replicate API Key Belum Di-Set
+            </h3>
+            <p className="text-xs text-muted-foreground mb-3">
+              Video yang ditampilkan adalah placeholder. Untuk generate video AI yang sebenarnya, 
+              Anda perlu menambahkan Replicate API token.
+            </p>
+            <div className="bg-black/30 rounded-lg p-3 text-xs font-mono text-warning">
+              <p className="mb-2">📝 Setup di terminal:</p>
+              <code className="block break-all">
+                npx supabase secrets set REPLICATE_API_TOKEN="r8_your_token" --project-ref jmqmirgxotxcdxyhkpun
+              </code>
+            </div>
+            <a
+              href="https://replicate.com/account/api-tokens"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 mt-3 text-xs text-primary hover:underline"
+            >
+              📌 Dapatkan API token di Replicate →
+            </a>
+          </div>
+        </div>
+      </motion.div>
 
       {/* Configuration Score & Warnings */}
       {!isCompleted && (
