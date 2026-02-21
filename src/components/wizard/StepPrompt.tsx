@@ -45,12 +45,12 @@ export const StepPrompt = ({ prompt, onPromptChange, videoType }: StepPromptProp
   const suggestions = videoType ? promptSuggestions[videoType] || [] : [];
 
   return (
-    <div className="space-y-6">
-      <div className="text-center space-y-2">
-        <h2 className="text-3xl sm:text-4xl font-heading font-bold">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="text-center space-y-2 px-2">
+        <h2 className="text-2xl sm:text-3xl md:text-4xl font-heading font-bold">
           Deskripsikan <span className="text-gradient">videomu</span>
         </h2>
-        <p className="text-muted-foreground text-lg">
+        <p className="text-muted-foreground text-sm sm:text-base md:text-lg">
           Semakin detail, semakin bagus hasilnya!
         </p>
       </div>
@@ -58,24 +58,24 @@ export const StepPrompt = ({ prompt, onPromptChange, videoType }: StepPromptProp
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="space-y-4"
+        className="space-y-3 sm:space-y-4"
       >
         <div className="relative">
           <Textarea
             value={prompt}
             onChange={(e) => onPromptChange(e.target.value)}
             placeholder="Contoh: Buatkan video promosi untuk coffee shop dengan nuansa cozy, tampilkan berbagai varian kopi dengan steam effect, background musik jazz santai, dan teks promo 'Diskon 20% Weekend Special'"
-            className="min-h-[180px] bg-glass border-border focus:border-primary resize-none text-base"
+            className="min-h-[150px] sm:min-h-[180px] bg-glass border-border focus:border-primary resize-none text-sm sm:text-base touch-manipulation"
           />
-          <div className="absolute bottom-3 right-3 flex items-center gap-1 text-muted-foreground text-sm">
-            <Sparkles className="w-4 h-4" />
+          <div className="absolute bottom-2 sm:bottom-3 right-2 sm:right-3 flex items-center gap-1 text-muted-foreground text-xs sm:text-sm">
+            <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             <span>{prompt.length} / 500</span>
           </div>
         </div>
 
         {suggestions.length > 0 && (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="space-y-2 sm:space-y-3">
+            <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground px-1">
               <Lightbulb className="w-4 h-4 text-primary" />
               <span>Butuh inspirasi? Klik salah satu:</span>
             </div>
@@ -87,9 +87,9 @@ export const StepPrompt = ({ prompt, onPromptChange, videoType }: StepPromptProp
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ delay: index * 0.1 }}
                   onClick={() => onPromptChange(suggestion)}
-                  className="px-3 py-2 text-sm text-left rounded-lg bg-secondary hover:bg-secondary/80 
+                  className="px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-left rounded-lg bg-secondary hover:bg-secondary/80
                     text-muted-foreground hover:text-foreground transition-all duration-200
-                    border border-transparent hover:border-primary/30"
+                    border border-transparent hover:border-primary/30 touch-manipulation max-w-full"
                 >
                   {suggestion}
                 </motion.button>

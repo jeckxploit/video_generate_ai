@@ -8,7 +8,6 @@ import { StepDuration } from './wizard/StepDuration';
 import { StepPrompt } from './wizard/StepPrompt';
 import { StepPreview } from './wizard/StepPreview';
 import { WizardNavigation } from './wizard/WizardNavigation';
-import { toast } from 'sonner';
 
 const stepOrder: WizardStep[] = ['type', 'style', 'duration', 'prompt', 'preview'];
 
@@ -57,8 +56,6 @@ export const VideoWizard = () => {
     }
   };
 
-  // Removed - now handled by StepPreview internally
-
   const renderStep = () => {
     switch (currentStep) {
       case 'type':
@@ -102,15 +99,15 @@ export const VideoWizard = () => {
   };
 
   return (
-    <div className="min-h-screen pt-24 pb-12">
-      <div className="container mx-auto px-4">
+    <div className="min-h-screen pt-14 sm:pt-16 pb-8 sm:pb-12">
+      <div className="container mx-auto px-3 sm:px-4">
         {/* Progress Indicator */}
-        <div className="mb-12">
+        <div className="mb-6 sm:mb-8 md:mb-12">
           <ProgressIndicator currentStep={currentStep} completedSteps={completedSteps} />
         </div>
 
         {/* Step Content */}
-        <div className="max-w-5xl mx-auto">
+        <div className="w-full max-w-2xl sm:max-w-3xl md:max-w-4xl lg:max-w-5xl mx-auto">
           <AnimatePresence mode="wait">
             <motion.div
               key={currentStep}
@@ -124,14 +121,16 @@ export const VideoWizard = () => {
           </AnimatePresence>
 
           {/* Navigation */}
-          <WizardNavigation
-            currentStep={currentStep}
-            canContinue={canContinue()}
-            onBack={goToPrevStep}
-            onNext={goToNextStep}
-            isFirstStep={isFirstStep}
-            isLastStep={isLastStep}
-          />
+          <div className="mt-6 sm:mt-8">
+            <WizardNavigation
+              currentStep={currentStep}
+              canContinue={canContinue()}
+              onBack={goToPrevStep}
+              onNext={goToNextStep}
+              isFirstStep={isFirstStep}
+              isLastStep={isLastStep}
+            />
+          </div>
         </div>
       </div>
     </div>

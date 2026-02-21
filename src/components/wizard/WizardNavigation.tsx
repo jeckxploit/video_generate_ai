@@ -26,25 +26,28 @@ export const WizardNavigation = ({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="flex items-center justify-between pt-8 border-t border-border"
+      className="flex items-center justify-between gap-2 sm:gap-4 pt-4 sm:pt-8 border-t border-border"
     >
       <Button
         variant="ghost"
         onClick={onBack}
         disabled={isFirstStep}
-        className={isFirstStep ? 'invisible' : ''}
+        className={`
+          ${isFirstStep ? 'invisible' : ''}
+          px-2 sm:px-4 text-xs sm:text-sm
+        `}
       >
-        <ChevronLeft className="w-5 h-5 mr-1" />
-        Kembali
+        <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5 mr-1" />
+        <span className="hidden sm:inline">Kembali</span>
       </Button>
 
       <Button
         onClick={onNext}
         disabled={!canContinue}
-        className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-8"
+        className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-4 sm:px-8 text-xs sm:text-sm sm:text-base h-9 sm:h-10"
       >
         Lanjut
-        <ChevronRight className="w-5 h-5 ml-1" />
+        <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 ml-1" />
       </Button>
     </motion.div>
   );
